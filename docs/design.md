@@ -1,7 +1,7 @@
 # CitrusSwerve: Design Doc
 
 3-module coaxial swerve drivetrain. Small scale (N20 gearmotors), one ESP32 on the robot, ROS 2 on a laptop.
-Status: **draft v0.3**. Values marked *(TBD)* are placeholders to be set in CAD or testing. Items marked *(verify)* come from memory and must be checked against datasheets or catalogs.
+Status: **draft v0.4**. Values marked *(TBD)* are placeholders to be set in CAD or testing. Items marked *(verify)* come from memory and must be checked against datasheets or catalogs.
 
 ## 1. Architecture
 
@@ -13,60 +13,66 @@ Status: **draft v0.3**. Values marked *(TBD)* are placeholders to be set in CAD 
  ESP32 DevKit V1 (on robot)
    - swerve kinematics, odometry
    - 3x drive velocity loops, 3x steer position loops
-   - AS5600 reads, navX reads, lidar UART passthrough
+   - AS5600 reads, navX reads, (lidar UART passthrough, later)
    - watchdog: motors stop if no cmd_vel for ~200 ms
         |
    3x module: [steer N20, no encoder] [drive N20 + encoder] [AS5600] [DRV8833 shared]
-   + navX2-MXP (yaw) + 2D lidar (LD06/LD19 class)
+   + navX2-MXP (yaw) + 2D lidar (LD06/LD19 class, deferred)
 ```
 
 - Closed loops run on one ESP32 core at fixed rates. WiFi and micro-ROS run on the other, so network jitter cannot disturb the loops.
 - Kinematics run on the ESP32, so driving does not depend on the laptop being responsive. The laptop only sends `cmd_vel` and consumes odometry, IMU and scan data.
 - All heavy processing (SLAM) is on the laptop.
+- **Lidar is deferred (cost).** The design works without it. GPIO15 stays free for its UART receive line.
 
 ## 2. Module mechanical concept (coaxial, nested shafts)
 
 Both motors sit on the fixed chassis, so no wires cross the rotating joint and steering can rotate continuously. There are four moving bodies: the **sleeve**, the **inner shaft**, the **wheel axle**, and the **fork** (which rotates with the sleeve).
 
-- **Steer path:** steer N20 -> metal pinion -> steer gear on a hollow outer sleeve -> rotates the module (fork + wheel).
-- **Drive path:** drive N20 -> metal pinion -> 1:1 gear -> inner shaft (concentric inside the sleeve) -> bevel gear A -> bevel gear B on the wheel axle.
+- **Steer path:** steer N20 -> printed pinion -> printed steer gear on a hollow outer sleeve -> rotates the module (fork + wheel).
+- **Drive path:** drive N20 -> printed pinion -> 1:1 printed gear -> inner shaft (concentric inside the sleeve) -> bevel gear A -> bevel gear B on the wheel axle.
 - **Steering sensor:** AS5600 reads a diametric magnet on a small 1:1 gear meshed with the steer gear. An equal-tooth gear keeps the reading absolute over 360°. The sensor is fixed to the chassis. *(Alternative: radially magnetized ring magnet on the hollow shaft.)*
 - **Wheel contact on the steering axis.** The contact patch must sit on (or very near) the steering axis. If it is offset, the contact point travels in a circle as the module steers and the robot moves even with the wheel undriven. Check this in CAD.
 - Gear geometry comes from the Onshape gear FeatureScript. *(TBD: module, tooth counts, center distances.)*
 
-### 2.1 Bearings and bushings
+### 2.1 Bearings: 625ZZ roller turret
 
-Plan: **hybrid.** Real bearings where load and steering smoothness matter, printed bushings where space matters.
+Bearing on hand: **30× 625ZZ** (5×16×5 mm), chosen as a general-purpose size that is reusable in other projects. Everything below uses that one size.
 
-| Location | Plan | Size *(verify against catalog)* |
-|---|---|---|
-| Sleeve in the chassis plate (x2, spaced apart) | Ball bearings. They carry robot weight, steer gear side load, and tipping moments, and they sit inside the steering loop. | 6701, 12×18×4 mm |
-| Inner shaft inside the sleeve | Printed bushings on a steel rod to start. Switch to bearings if draggy or loose. | 3 mm rod. Bearing option: MR83, 3×8×3 mm |
-| Sleeve geometry | 8 mm bore, about 12 mm outside diameter (2 mm wall) | |
-| Slimmer variant | 2 mm shaft, MR62 (2×6×2.5), sleeve 6 mm bore and 10 mm OD on 6700 (10×15×4). Shaft is more fragile. | |
+| Location | Plan |
+|---|---|
+| Sleeve, radial support | **3 radial rollers** (625ZZ on vertical M5 bolts through the chassis plate) at 120°, rolling on the sleeve's outside surface. **One must be adjustable** (slotted mount or eccentric spacer) to set a light, even preload. |
+| Sleeve, axial support | **3 thrust rollers** (625ZZ on horizontal bolts) bearing on a flange on the sleeve, plus a retainer lip on the other face so the sleeve cannot lift out. They carry the robot's weight. |
+| Inner shaft inside the sleeve | **2× 625ZZ** pressed into the sleeve. Sleeve bore 16 mm, outside diameter about 20 mm (2 mm wall). Shaft is 5 mm. |
+| Wheel axle in the fork | 2× 625ZZ *(TBD: axle diameter and size)* |
+| Sensor gear axle | Printed bushings, or more 625ZZ |
 
-Notes on the original sizes: an 8 mm sleeve bore running on 8×16 mm bearings is **not** a consistent stack (bore and outer diameter can't both be 8 mm). The table above replaces it.
+Notes:
+- Footprint: rollers are 16 mm in diameter around a 20 mm sleeve, so the module is roughly 50 mm across.
+- **Bearing count:** per module 6 (turret) + 2 (inner shaft) + 2 (wheel axle) = 10, so 30 for three modules. That uses all 30 with nothing spare, and the sensor gear axles need more. Buy a few extra or use bushings there.
+- **Rolling surface:** the rollers run on the sleeve, so use a smooth track, such as a sanded printed ring or a thin brass or aluminum tube pressed onto the sleeve. Steel on rough plastic wears flats into it.
+- **Binding:** six fixed rollers against one sleeve bind if even one is a fraction of a millimeter out of place. Binding means the parts jam against each other, so motion becomes stiff, notchy, or uneven in some positions. Avoid it by making at least one roller adjustable, keeping each roller axis square, and testing the turret by hand before adding gears.
+- **Inner shaft material:** TBD, an M5 bolt or a ground rod. Do not use a printed shaft turning in a printed bore. The inner shaft can run on 625ZZ bearings, or printed bushings on steel as a lighter alternative.
 
-Printed bushing rules:
-- Bear on a steel rod, never a printed shaft in a printed bore.
-- Design 0.1–0.2 mm clearance and ream the bore by hand. Print the bore axis vertically.
-- PETG or nylon over PLA. Use a drop of light grease or PTFE lube.
-- Test the nested stack on its own before building the full module. Misalignment between bushing pairs causes binding.
+Alternatives considered:
+- 688 (8×16×4) sleeve bearings with printed bushings inside, slimmer but uses a different size.
+- 6806 (30×42×7) with 608 inside, robust but about 50 mm or more and heavier.
+- 6804 (20×32×7) under the sleeve with 625ZZ inside, a good fit but needs a second size, and the roller turret replaced it.
 
 ### 2.2 Thrust and mesh adjustment
 
 - Bevel gears push axially on both shafts. Add a thrust washer (nylon or PTFE) under the bevel gear and a shaft collar or shoulder to stop the inner shaft sliding.
 - Bevel gears only mesh well at the right mounting distance. Give the bevel mounts shims or slots.
-- Prefer **straight miter gears (1:1)**: equal tooth counts balance the thrust, and mounting is simplest.
+- Prefer **straight miter gears (1:1)**: equal tooth counts balance the thrust, and mounting is simplest. A 5 mm bore makes the miter gears about 14 mm or more in pitch diameter. Printed bevels are fragile at this size *(TBD: print or buy)*.
 - Bevel efficiency is a few percent below spur gears (ballpark 93–98% per mesh against 97–99%). Alignment and print quality matter more than gear type at this scale.
 
-### 2.3 Attaching gears to N20 shafts
+### 2.3 Gears and attaching them to shafts
 
-- **Motor-side pinions:** buy metal pinions (N20 pinion, 3 mm D bore, match the module to the mating gear). Printed teeth at module 0.5 are fragile.
-- **Larger printed gears on the inner shaft:** printed hub with an **M2 set screw threaded into a heat-set insert**. The screw bears on the D flat.
-  - Heat-set inserts survive repeated tightening, unlike threads tapped into plastic. Follow the insert supplier's hole size and depth. Print the hole axis vertically where possible, and keep at least about 1 mm of plastic around the insert. The insert sits radially in the hub wall, so expect a hub OD of roughly 9–10 mm *(check against your insert)*.
-  - N20 shafts are short (around 9–10 mm, check your motor), so keep the hub short.
-- Printed gears: use module 0.8–1.0. Module 0.5 is too fine to print reliably.
+- **All gears are printed, including the motor pinions.** No metal pinions are being bought.
+- Use module 0.8–1.0. Module 0.5 is too fine to print reliably.
+- Attachment: printed hub with an **M2 set screw threaded into an M2 heat-set insert**. The screw bears on the D flat of the N20 shaft. Heat-set inserts survive repeated tightening, unlike threads tapped into plastic. Follow the insert supplier's hole size and depth. Print the hole axis vertically where possible, and keep at least about 1 mm of plastic around the insert.
+- **Pinion boss:** a 10–12T pinion at module 0.8 has a root diameter around 7–8 mm, leaving about 2 mm of wall around a 3 mm D bore. That is too thin for a radial M2 insert. Give the pinion a **boss** (a cylinder about 9–10 mm in diameter) beside the teeth and put the insert in it. The N20 shaft is short (around 9–10 mm, check the motor), so the teeth and boss share that length. Shorter inserts exist, so check your supplier.
+- Gears on the 5 mm inner shaft: file a flat on the rod, or use a set screw on the round rod.
 
 ## 3. Steer-drive coupling
 
@@ -120,7 +126,7 @@ speed_i = |v_i|,  angle_i = atan2(v_i.y, v_i.x)
 
 ## 5. Motors, ratios and targets
 
-Drive and steer use the same part, a **500 rpm, 6 V N20**. The drive motors have the encoder version. This gives one SKU and shared spares. 500 rpm is a good general-purpose speed.
+Drive and steer use the same speed class, a **500 rpm, 6 V N20**. The drive motors are the encoder version (GA12-N20). 500 rpm is a good general-purpose speed.
 
 **Ratios (current plan, TBD)**
 
@@ -132,9 +138,10 @@ Drive and steer use the same part, a **500 rpm, 6 V N20**. The drive motors have
 | Sensor gear to steer gear | 1:1 | Keeps the AS5600 absolute over 360° |
 
 - Steer takes more reduction than drive: 0.7–0.9 s per full turn is fine, it calms the position loop, and it reduces the coupling cost.
+- **Steer gear size:** a 5:1 reduction with a 10T printed pinion at module 0.8 needs a 50T gear, about 40 mm in pitch diameter, around the sleeve. This sets the module footprint. A two-stage reduction or a smaller ratio would shrink it, so trade it off in the FeatureScript.
 - If more torque is needed, prefer a slower motor (for example 300 rpm), which puts the reduction inside the motor's metal gearbox, over adding printed stages.
 
-**Torque reality check (rough estimates, verify on the datasheet).** 1 kg over 3 wheels at 1 m/s² needs about 0.33 N per wheel, about 5 mN·m at a 30 mm wheel. Floor scrub when steering in place is of a similar size. A 500 rpm N20 should have far more stall torque than this, so the real losses are **friction** in the bushings, printed gears and bevel mesh. Do not plan on heavy reduction to compensate for a draggy build.
+**Torque reality check (rough estimates, verify on the datasheet).** 1 kg over 3 wheels at 1 m/s² needs about 0.33 N per wheel, about 5 mN·m at a 30 mm wheel. Floor scrub when steering in place is of a similar size. A 500 rpm N20 should have far more stall torque than this, so the real losses are **friction** in the bearings, printed gears and bevel mesh. Do not plan on heavy reduction to compensate for a draggy build.
 
 | Item | Target |
 |---|---|
@@ -147,37 +154,45 @@ Drive and steer use the same part, a **500 rpm, 6 V N20**. The drive motors have
 
 ## 6. Electronics and parts (bill of materials)
 
-| Part | Qty | Notes |
+"Ordered" means it was in the cart on 2026-11-25. "Owned" means it was already on hand.
+
+| Part | Qty | Status / notes |
 |---|---|---|
-| ESP32 DevKit V1 (classic) | 1 | See `electrical/pinmap.md` |
-| DRV8833 | 3 | One per module (steer + drive). 10.8 V max, 1.5 A continuous per channel |
-| N20 500 rpm 6 V, with encoder | 3 | Drive |
-| N20 500 rpm 6 V, no encoder | 3 | Steer |
-| AS5600 + diametric magnet | 3 | Fixed address 0x36 |
-| TCA9548A I²C mux | 1 | Owned. Address 0x70 |
-| navX2-MXP | 1 | Yaw. Level shifting *(verify I/O is 3.3 V)* |
-| 2D lidar (LD06 / LD19 class) | 1 | 5 V power, UART out at 3.3 V *(verify)* |
-| 5 V 3 A BEC | 1 | Electronics only. Confirm input range covers 2S (8.4 V) |
-| 2S LiPo, 800 mAh | 1 | Min 6.4 V cutoff, check C rating |
-| Metal N20 pinions | 6 | 3 mm D bore, module to match mating gear |
-| Bevel / miter gears, 1:1 | 3 pairs | Source or print. Add shimming |
-| Ball bearings | 6 (6701) | 2 per module for the sleeve. 6× MR83 optional for inner shafts |
-| Steel rod, 3 mm | 3 | Inner shafts |
-| Thrust washers, shaft collars | 3 sets | Nylon or PTFE washers |
-| M2 heat-set inserts and M2 set screws | per hub | Inserts for set screws and for bolting gears to hubs |
-| Small parts | | Power switch, ~5 A fuse, battery connector, Schottky diode on BEC output, battery sense divider, 470–1000 µF bulk caps near the drivers, 0.1 µF ceramic across each motor |
+| ESP32 DevKit V1 (classic) | 1 | Owned. See `electrical/pinmap.md` |
+| DRV8833 | 3 | Ordered. One per module (steer + drive). 10.8 V max, 1.5 A continuous per channel |
+| GA12-N20 encoder motor, 500 rpm 6 V | 3 | Ordered. Drive. Check encoder supply works at 3.3 V |
+| N20 motor, 500 rpm 6 V, no encoder | 3 | Ordered. Steer |
+| Spare N20 motors | 1 each type | To buy |
+| AS5600 board | 3 | Ordered. Comes with magnet |
+| TCA9548A I²C mux | 1 | Ordered. Address 0x70 |
+| navX2-MXP | 1 | Owned. Level shifting *(verify I/O is 3.3 V)* |
+| 5 V 3 A BEC | 1 | Owned. Confirm input range covers 2S (8.4 V) |
+| 2S LiPo, 800 mAh | 1 | Owned. Min 6.4 V cutoff, check C rating |
+| 625ZZ bearings | 30 | Owned or ordered. See section 2.1. A few more recommended |
+| M2 heat-set inserts (M2×L3×OD3.2) | 100 | Ordered |
+| M2 screws, incl. set screws | | Owned |
+| M3 heat-set inserts (M3×L4×OD4.2) and M3 screw kit | | Ordered, for the chassis |
+| M5 bolts | | For roller axles and shaft *(TBD)* |
+| Bevel / miter gears, 1:1, 5 mm bore | 3 pairs | TBD, print or buy |
+| Wheels or tires, ~30 mm | 3 | To buy |
+| Thrust washers, shaft collars | 3 sets | To buy (nylon or PTFE washers) |
+| Small parts | | To buy: power switch, ~5 A fuse, battery connector, Schottky diode on BEC output, battery sense divider (100 kΩ / 47 kΩ), 4.7 kΩ pull-ups, 1 kΩ series resistors, 470–1000 µF bulk caps near the drivers, 0.1 µF ceramics (7), wire, headers or perfboard |
+| Panel magnets | | Owned. See section 8 for placement |
+| 2D lidar (LD06 / LD19 class) | 1 | Deferred |
+
+Not buying: metal pinions (all gears are printed), steel rod (shafts already on hand, but the plan does not use them).
 
 ## 7. Power
 
 ```
 2S LiPo (6.4–8.4 V) --+-- fuse/switch --+-- DRV8833 VM (motors, battery-direct)
-                                        +-- BEC -> 5 V -> ESP32 VIN, lidar, navX
+                                        +-- BEC -> 5 V -> ESP32 VIN, navX
                                                     ESP32 3V3 -> AS5600, mux, encoders
 ```
 
 - Motors are 6 V parts on a 7.4–8.4 V pack. The firmware caps PWM duty at `6 V / V_battery` (about 71% at 8.4 V), using the measured pack voltage. No separate buck regulator is needed. If speed varies too much as the pack drains, add a 6 V buck later.
 - The battery sense divider doubles as a low-voltage cutoff (stop motors below ~6.4 V).
-- Estimated 5 V rail: ESP32 0.25–0.5 A, lidar 0.3–0.4 A, navX ~0.1 A, sensors ~0.05 A. Total about 1–1.3 A of the 3 A available.
+- Estimated 5 V rail without lidar: ESP32 0.25–0.5 A, navX ~0.1 A, sensors ~0.05 A. With lidar add about 0.3–0.4 A. Either fits within the 3 A BEC.
 - Tie motor and logic grounds at one point.
 - All ESP32 pins are 3.3 V only and not 5 V tolerant. Power every sensor and encoder from 3.3 V.
 
@@ -185,8 +200,9 @@ Drive and steer use the same part, a **500 rpm, 6 V N20**. The drive motors have
 
 - **AS5600 x3:** one I²C bus through the TCA9548A, one AS5600 per channel. Sample at ≥ 500 Hz, filter the derivative. Estimated ~0.8 ms per cycle for three reads at 400 kHz *(confirm on bench)*.
 - **navX2:** I²C address 0x32 *(verify)* does not collide with 0x36 or 0x70, so it sits on the main bus next to the mux. Read it at 50–100 Hz. There is no ready-made ESP32 library as far as I know, so expect to read its registers yourself.
-- **Lidar:** UART receive only. About 4.5k points/s, around 450 points per scan at 10 Hz. Either parse on the ESP32 and publish `LaserScan` through micro-ROS (needs the message buffers enlarged), or forward the raw serial stream to the laptop and parse there.
+- **Lidar (later):** UART receive only. About 4.5k points/s, around 450 points per scan at 10 Hz. Either parse on the ESP32 and publish `LaserScan` through micro-ROS (needs the message buffers enlarged), or forward the raw serial stream to the laptop and parse there.
 - **Mux pull-ups:** check for pull-ups on the upstream and each downstream channel. Do not stack many parallel pull-ups.
+- **Magnet interference:** keep panel magnets several centimeters away from each AS5600, the navX (it has a magnetometer), and the N20 encoder motors. Put panel magnets around the outer edge of the chassis. Test the AS5600 angle and the navX yaw with the panels on and off.
 
 ## 9. Decisions log
 
@@ -194,24 +210,30 @@ Drive and steer use the same part, a **500 rpm, 6 V N20**. The drive motors have
 - **ESP32 only, no Pi or Pico.** Saves the Pi's power draw on an 800 mAh pack. Arduino Nano rejected (pins, interrupts, RAM).
 - **DRV8833 over TB6612.** Smaller, 2 pins per channel, lower on-resistance. Needs bulk capacitance for voltage spikes (10.8 V max).
 - **Battery-direct motor power with a duty cap** instead of a 6 V buck.
-- **Lidar chosen over camera/AprilTag.** Processing is on the laptop either way.
+- **Lidar chosen over camera/AprilTag, then deferred for cost.** Processing is on the laptop either way.
 - **Ring-gear (internal+external teeth) drive rejected.** It would need very large bearings or a roller ring, and it keeps the same coupling term anyway.
+- **Coaxial chosen over differential swerve.** Diffy needs encoders on all 6 motors (12 inputs, about 28 signals in total), which doesn't fit the classic ESP32 or the motors already owned. Its main benefit, torque sharing, matters less here because friction, not motor torque, is the expected limit.
+- **625ZZ roller turret** for the sleeve, chosen so a single reusable bearing size covers the whole module. Replaced the 688/683, 6806/608, and 6804 options.
+- **All gears printed, heat-set inserts for set screws.** Metal pinions rejected.
 
 ## 10. Open questions
 
 1. Gear tooth counts and center distances (FeatureScript).
 2. Bevel arrangement and the sign of the coupling term.
 3. Stall current and torque of the chosen N20 against the DRV8833 limit.
-4. Whether lidar is parsed on the ESP32 or on the laptop.
-5. Whether the fork can fit a 1.5:1 bevel pair, or whether drive stays at 1:1.
-6. Inner-shaft support: printed bushings or MR83 bearings.
+4. Bevel / miter gears with a 5 mm bore: print or buy.
+5. Inner shaft material, and the wheel axle diameter and bearing size.
+6. Roller track material for the sleeve, and the preload method (slot or eccentric).
+7. Whether the fork can fit a 1.5:1 bevel pair, or whether drive stays at 1:1.
+8. Whether the steer reduction can fit in 40 mm of gear, or needs two stages.
+9. Whether the encoders on the GA12-N20 run on 3.3 V.
 
 ## 11. Milestones
 
 1. Onshape model of the four moving bodies with revolute and gear relation mates. Confirm the coupling direction.
-2. Bearing stack test piece: sleeve, inner shaft and their supports only. Spin by hand.
+2. Roller turret test piece: sleeve, rollers, inner shaft and bearings only. Spin by hand and check for binding.
 3. Python kinematics + simulation, including the coupling term and the stopped-wheel steer case.
 4. Single-module bench rig: steer loop and drive loop.
 5. Three modules + ESP32 firmware + micro-ROS link.
 6. navX, odometry, teleop.
-7. Lidar + `slam_toolbox` on the laptop.
+7. Lidar + `slam_toolbox` on the laptop, when the budget allows.
