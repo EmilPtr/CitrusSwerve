@@ -154,24 +154,24 @@ Drive and steer use the same speed class, a **500 rpm, 6 V N20**. The drive moto
 
 ## 6. Electronics and parts (bill of materials)
 
-"Ordered" means it was in the cart on 2026-11-25. "Owned" means it was already on hand.
+"In cart" means it was in the AliExpress cart on 2026-11-25 and **has not been ordered**. "Owned" means it was already on hand.
 
 | Part | Qty | Status / notes |
 |---|---|---|
 | ESP32 DevKit V1 (classic) | 1 | Owned. See `electrical/pinmap.md` |
-| DRV8833 | 3 | Ordered. One per module (steer + drive). 10.8 V max, 1.5 A continuous per channel |
-| GA12-N20 encoder motor, 500 rpm 6 V | 3 | Ordered. Drive. Check encoder supply works at 3.3 V |
-| N20 motor, 500 rpm 6 V, no encoder | 3 | Ordered. Steer |
+| DRV8833 | 3 | In cart. One per module (steer + drive). 10.8 V max, 1.5 A continuous per channel |
+| GA12-N20 encoder motor, 500 rpm 6 V | 3 | In cart. Drive. Check encoder supply works at 3.3 V |
+| N20 motor, 500 rpm 6 V, no encoder | 3 | In cart. Steer |
 | Spare N20 motors | 1 each type | To buy |
-| AS5600 board | 3 | Ordered. Comes with magnet |
-| TCA9548A I²C mux | 1 | Ordered. Address 0x70 |
+| AS5600 board | 3 | In cart. Comes with magnet |
+| TCA9548A I²C mux | 1 | In cart. Address 0x70 |
 | navX2-MXP | 1 | Owned. Level shifting *(verify I/O is 3.3 V)* |
 | 5 V 3 A BEC | 1 | Owned. Confirm input range covers 2S (8.4 V) |
 | 2S LiPo, 800 mAh | 1 | Owned. Min 6.4 V cutoff, check C rating |
-| 625ZZ bearings | 30 | Owned or ordered. See section 2.1. A few more recommended |
-| M2 heat-set inserts (M2×L3×OD3.2) | 100 | Ordered |
+| 625ZZ bearings | 30 | To buy (30 planned). See section 2.1. A few more recommended |
+| M2 heat-set inserts (M2×L3×OD3.2) | 100 | In cart |
 | M2 screws, incl. set screws | | Owned |
-| M3 heat-set inserts (M3×L4×OD4.2) and M3 screw kit | | Ordered, for the chassis |
+| M3 heat-set inserts (M3×L4×OD4.2) and M3 screw kit | | In cart, for the chassis |
 | M5 bolts | | For roller axles and shaft *(TBD)* |
 | Bevel / miter gears, 1:1, 5 mm bore | 3 pairs | TBD, print or buy |
 | Wheels or tires, ~30 mm | 3 | To buy |
