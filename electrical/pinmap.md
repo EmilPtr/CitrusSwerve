@@ -37,8 +37,18 @@ Each DRV8833 serves one module: channel A = steer, channel B = drive.
 |---|---|---|
 | I²C SDA | 21 | 400 kHz, 4.7 kΩ pull-ups to 3.3 V (check whether the mux board already has them) |
 | I²C SCL | 22 | |
-| Lidar RX (UART2) | 15 | Receive only. Strapping pin that defaults high, so a lidar that idles high is fine. 1 kΩ series resistor. |
+| Lidar RX (UART2), LDROBOT LD06 | 15 | Receive only, because the LD06 streams by itself. Strapping pin that defaults high, so a lidar that idles high is fine. 1 kΩ series resistor. |
 | Battery sense (ADC1) | 39 | Divider 100 kΩ / 47 kΩ (8.4 V -> ~2.7 V), 0.1 µF at the pin. Use ADC1 only, because ADC2 doesn't work while WiFi is on. Oversample and calibrate. |
+
+## Spare pins (none are clean)
+
+After all of the above, the unused GPIOs are **0, 1, 3 and 12**. All are awkward:
+
+- **0:** BOOT button, must be high at reset.
+- **1, 3:** UART0, used for USB programming and serial logging.
+- **12:** sets the flash voltage at boot, must be low at reset.
+
+If the LD06 needs a PWM motor-speed line, use GPIO0 or GPIO12 as an output and check the datasheet first.
 
 ## Pins you must not use
 

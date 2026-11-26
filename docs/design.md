@@ -1,7 +1,7 @@
 # CitrusSwerve: Design Doc
 
 3-module coaxial swerve drivetrain. Small scale (N20 gearmotors), one ESP32 on the robot, ROS 2 on a laptop.
-Status: **draft v0.4**. Values marked *(TBD)* are placeholders to be set in CAD or testing. Items marked *(verify)* come from memory and must be checked against datasheets or catalogs.
+Status: **draft v0.5**. Values marked *(TBD)* are placeholders to be set in CAD or testing. Items marked *(verify)* come from memory and must be checked against datasheets or catalogs.
 
 ## 1. Architecture
 
@@ -13,17 +13,17 @@ Status: **draft v0.4**. Values marked *(TBD)* are placeholders to be set in CAD 
  ESP32 DevKit V1 (on robot)
    - swerve kinematics, odometry
    - 3x drive velocity loops, 3x steer position loops
-   - AS5600 reads, navX reads, (lidar UART passthrough, later)
+   - AS5600 reads, navX reads, lidar UART passthrough
    - watchdog: motors stop if no cmd_vel for ~200 ms
         |
    3x module: [steer N20, no encoder] [drive N20 + encoder] [AS5600] [DRV8833 shared]
-   + navX2-MXP (yaw) + 2D lidar (LD06/LD19 class, deferred)
+   + navX2-MXP (yaw) + 2D lidar (LDROBOT LD06)
 ```
 
 - Closed loops run on one ESP32 core at fixed rates. WiFi and micro-ROS run on the other, so network jitter cannot disturb the loops.
 - Kinematics run on the ESP32, so driving does not depend on the laptop being responsive. The laptop only sends `cmd_vel` and consumes odometry, IMU and scan data.
 - All heavy processing (SLAM) is on the laptop.
-- **Lidar is deferred (cost).** The design works without it. GPIO15 stays free for its UART receive line.
+- **Lidar: LDROBOT LD06**, chosen after weighing several options (section 9). It streams scans over UART by itself, so it needs only one receive pin (GPIO15). Not bought yet, and the drivetrain works without it.
 
 ## 2. Module mechanical concept (coaxial, nested shafts)
 
@@ -178,7 +178,7 @@ Drive and steer use the same speed class, a **500 rpm, 6 V N20**. The drive moto
 | Thrust washers, shaft collars | 3 sets | To buy (nylon or PTFE washers) |
 | Small parts | | To buy: power switch, ~5 A fuse, battery connector, Schottky diode on BEC output, battery sense divider (100 kΩ / 47 kΩ), 4.7 kΩ pull-ups, 1 kΩ series resistors, 470–1000 µF bulk caps near the drivers, 0.1 µF ceramics (7), wire, headers or perfboard |
 | Panel magnets | | Owned. See section 8 for placement |
-| 2D lidar (LD06 / LD19 class) | 1 | Deferred |
+| 2D lidar, LDROBOT LD06 | 1 | To buy. Streams over UART (RX only, GPIO15). Check whether it needs a PWM motor-speed input, the baud rate (about 230400), and that the listing is a genuine LD06 |
 
 Not buying: metal pinions (all gears are printed), steel rod (shafts already on hand, but the plan does not use them).
 
@@ -200,7 +200,7 @@ Not buying: metal pinions (all gears are printed), steel rod (shafts already on 
 
 - **AS5600 x3:** one I²C bus through the TCA9548A, one AS5600 per channel. Sample at ≥ 500 Hz, filter the derivative. Estimated ~0.8 ms per cycle for three reads at 400 kHz *(confirm on bench)*.
 - **navX2:** I²C address 0x32 *(verify)* does not collide with 0x36 or 0x70, so it sits on the main bus next to the mux. Read it at 50–100 Hz. There is no ready-made ESP32 library as far as I know, so expect to read its registers yourself.
-- **Lidar (later):** UART receive only. About 4.5k points/s, around 450 points per scan at 10 Hz. Either parse on the ESP32 and publish `LaserScan` through micro-ROS (needs the message buffers enlarged), or forward the raw serial stream to the laptop and parse there.
+- **Lidar (LDROBOT LD06):** UART receive only on GPIO15, since it streams by itself. It may need a PWM line for motor speed, so check the datasheet. If it does, GPIO0 or GPIO12 are the candidates. About 4.5k points/s, around 450 points per scan at 10 Hz. Either parse on the ESP32 and publish `LaserScan` through micro-ROS (needs the message buffers enlarged), or forward the raw serial stream to the laptop and parse there.
 - **Mux pull-ups:** check for pull-ups on the upstream and each downstream channel. Do not stack many parallel pull-ups.
 - **Magnet interference:** keep panel magnets several centimeters away from each AS5600, the navX (it has a magnetometer), and the N20 encoder motors. Put panel magnets around the outer edge of the chassis. Test the AS5600 angle and the navX yaw with the panels on and off.
 
@@ -210,11 +210,13 @@ Not buying: metal pinions (all gears are printed), steel rod (shafts already on 
 - **ESP32 only, no Pi or Pico.** Saves the Pi's power draw on an 800 mAh pack. Arduino Nano rejected (pins, interrupts, RAM).
 - **DRV8833 over TB6612.** Smaller, 2 pins per channel, lower on-resistance. Needs bulk capacitance for voltage spikes (10.8 V max).
 - **Battery-direct motor power with a duty cap** instead of a 6 V buck.
-- **Lidar chosen over camera/AprilTag, then deferred for cost.** Processing is on the laptop either way.
+- **Lidar chosen over camera/AprilTag.** Processing is on the laptop either way.
 - **Ring-gear (internal+external teeth) drive rejected.** It would need very large bearings or a roller ring, and it keeps the same coupling term anyway.
 - **Coaxial chosen over differential swerve.** Diffy needs encoders on all 6 motors (12 inputs, about 28 signals in total), which doesn't fit the classic ESP32 or the motors already owned. Its main benefit, torque sharing, matters less here because friction, not motor torque, is the expected limit.
 - **625ZZ roller turret** for the sleeve, chosen so a single reusable bearing size covers the whole module. Replaced the 688/683, 6806/608, and 6804 options.
 - **All gears printed, heat-set inserts for set screws.** Metal pinions rejected.
+- **LDROBOT LD06 chosen as the lidar.** About 40 g and 39 mm across, streams by itself (RX only), so it fits the classic ESP32 with no extra pins. Rejected: the RPLIDAR A1M8 (about 170 g and 96 mm across, needs a TX line and a motor line), a DIY spinning or swinging single-point rangefinder (the sensor's sample rate limits points per scan and gives sparse, smeared scans), and an I²C ToF ring (obstacle detection only, no mapping). The WitMotion dTOF listing appears to be the same LDROBOT family (D500 / LD19 class).
+- **Classic ESP32 kept as the controller.** The ESP32-S3, a Pico or Pico 2 W as main board, a Nano encoder bridge, and sharing UART0 with the lidar through switches were all considered. None is needed now that the lidar is RX only.
 
 ## 10. Open questions
 
@@ -227,6 +229,7 @@ Not buying: metal pinions (all gears are printed), steel rod (shafts already on 
 7. Whether the fork can fit a 1.5:1 bevel pair, or whether drive stays at 1:1.
 8. Whether the steer reduction can fit in 40 mm of gear, or needs two stages.
 9. Whether the encoders on the GA12-N20 run on 3.3 V.
+10. Whether the LD06 needs a PWM motor-speed input (a pin from GPIO0 or GPIO12), or can be tied low or left to internal control.
 
 ## 11. Milestones
 
